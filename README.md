@@ -11,7 +11,33 @@ vi config.json
 go build
 ```
 
+Alternatively, create a `config.json` file on your own based on [config.dist.json](./config.dist.json) and install with:
+
+```
+go get -u github.com/cneill/czds
+```
+
 ## Usage
+
+```
+Usage: czds [GLOBAL OPTIONS] <COMMAND> [COMMAND OPTIONS]
+Commands:
+* download
+* list
+* parse
+
+Global options:
+  -config string
+        config file to load (default "config.json")
+  -verbose
+        verbose output
+```
+
+### List available zone files
+
+```
+./czds list
+```
 
 ### Download zone files
 
