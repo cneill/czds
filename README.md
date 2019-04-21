@@ -45,7 +45,7 @@ Global options:
 ./czds download
 ```
 
-### Parse zone files
+### Parse zone files (TODO)
 
 ```
 ./czds parse
