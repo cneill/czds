@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"mime"
 	"net/http"
 	"net/url"
 	"path"
@@ -15,14 +16,16 @@ import (
 type Client struct {
 	*http.Client
 	Conf        *Config
+	Verbose     bool
 	AccessToken string
 }
 
 // NewClient returns an initialized Client
-func NewClient(conf *Config) *Client {
+func NewClient(conf *Config, verbose bool) *Client {
 	return &Client{
-		Client: http.DefaultClient,
-		Conf:   conf,
+		Client:  http.DefaultClient,
+		Verbose: verbose,
+		Conf:    conf,
 	}
 }
 
@@ -58,7 +61,9 @@ func (c *Client) Auth() error {
 
 	respBody, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		fmt.Printf("Couldn't read response body: %v", err)
+		if c.Verbose {
+			fmt.Printf("Couldn't read response body: %v", err)
+		}
 	}
 
 	switch resp.StatusCode {
@@ -93,6 +98,7 @@ func (c *Client) Get(URL string) (*http.Response, error) {
 		return nil, err
 	}
 
+	req.Header.Add("User-Agent", "czds / 0.0.1 https://github.com/cneill/czds")
 	req.Header.Add("Content-Type", "application/json")
 	req.Header.Add("Accept", "application/json")
 	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", c.AccessToken))
@@ -111,7 +117,9 @@ func (c *Client) GetZoneLinks() ([]string, error) {
 
 	respBody, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		fmt.Printf("Couldn't read response body: %v", err)
+		if c.Verbose {
+			fmt.Printf("Couldn't read response body: %v", err)
+		}
 	}
 
 	switch resp.StatusCode {
@@ -121,7 +129,9 @@ func (c *Client) GetZoneLinks() ([]string, error) {
 		}
 
 	case http.StatusUnauthorized:
-		fmt.Println("Access token expired; reauthenticating")
+		if c.Verbose {
+			fmt.Println("Access token expired; reauthenticating")
+		}
 		c.Auth()
 		return c.GetZoneLinks()
 
@@ -146,7 +156,18 @@ func (c *Client) DownloadZoneFiles(URLs []string) error {
 
 // DownloadZoneFile downloads an individual zone file
 func (c *Client) DownloadZoneFile(URL string) error {
-	fmt.Printf("Downloading %s...\n", URL)
+	var filename string
+
+	u, err := url.Parse(URL)
+	if err != nil {
+		return fmt.Errorf("invalid URL")
+	}
+	_, file := path.Split(u.Path)
+	filename = fmt.Sprintf("%s.gz", file)
+
+	if c.Verbose {
+		fmt.Printf("Downloading %s...\n", URL)
+	}
 	resp, err := c.Get(URL)
 	if err != nil {
 		return err
@@ -154,23 +175,18 @@ func (c *Client) DownloadZoneFile(URL string) error {
 
 	respBody, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		fmt.Printf("Couldn't read response body: %v", err)
+		if c.Verbose {
+			fmt.Printf("Couldn't read response body: %v", err)
+		}
 	}
 
 	switch resp.StatusCode {
 	case http.StatusOK:
-		u, err := url.Parse(URL)
-		if err != nil {
-			return fmt.Errorf("invalid URL")
-		}
-		_, file := path.Split(u.Path)
-		path := fmt.Sprintf("%s/%s.gz", c.Conf.WorkingDir, file)
-		fmt.Printf("\tWriting to file %s...\n", path)
-		if err := ioutil.WriteFile(path, respBody, 0644); err != nil {
-			return fmt.Errorf("failed to write to path %s: %v", path, err)
-		}
+		break
 	case http.StatusUnauthorized:
-		fmt.Println("Access token expired; reauthenticating")
+		if c.Verbose {
+			fmt.Println("Access token expired; reauthenticating")
+		}
 		c.Auth()
 		return c.DownloadZoneFile(URL)
 	case http.StatusNotFound:
@@ -178,6 +194,27 @@ func (c *Client) DownloadZoneFile(URL string) error {
 	default:
 		return fmt.Errorf("unknown status error: (%d): %s", resp.StatusCode, respBody)
 
+	}
+
+	cd := resp.Header.Get("Content-Disposition")
+	_, params, err := mime.ParseMediaType(cd)
+	if err != nil {
+		if c.Verbose {
+			fmt.Printf("error parsing Content-Disposition header: %v", err)
+		}
+	} else {
+		if n, ok := params["filename"]; ok {
+			filename = n
+		}
+
+	}
+
+	path := fmt.Sprintf("%s/%s", c.Conf.WorkingDir, filename)
+	if c.Verbose {
+		fmt.Printf("\tWriting to file %s...\n", path)
+	}
+	if err := ioutil.WriteFile(path, respBody, 0644); err != nil {
+		return fmt.Errorf("failed to write to path %s: %v", path, err)
 	}
 
 	return nil
