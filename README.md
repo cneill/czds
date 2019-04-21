@@ -1,6 +1,6 @@
 # czds
 
-Download zone files from ICANN's CZDS portal. Based on ICANN's [czds-api-client-python](https://github.com/icann/czds-api-client-python).
+Download zone files from ICANN's CZDS API. Based on ICANN's [czds-api-client-python](https://github.com/icann/czds-api-client-python).
 
 ## Setup 
 

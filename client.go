@@ -98,7 +98,7 @@ func (c *Client) Get(URL string) (*http.Response, error) {
 		return nil, err
 	}
 
-	req.Header.Add("User-Agent", "czds / 0.0.1 https://github.com/cneill/czds")
+	req.Header.Add("User-Agent", "czds / v0.0.1 https://github.com/cneill/czds")
 	req.Header.Add("Content-Type", "application/json")
 	req.Header.Add("Accept", "application/json")
 	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", c.AccessToken))
