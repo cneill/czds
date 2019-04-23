@@ -1,9 +1,15 @@
 package main
 
 import (
+	"bufio"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"os"
+	"strings"
+	"syscall"
+
+	"golang.org/x/crypto/ssh/terminal"
 )
 
 // Config specifies auth info, URL info, etc.
@@ -27,9 +33,30 @@ func ParseConfig(filename string) (*Config, error) {
 		return nil, err
 	}
 
-	if c.Username == "" || c.Password == "" {
-		return nil, fmt.Errorf("You must include username/password credentials")
+	if c.Username == "" {
+		fmt.Printf("Enter your ICANN username: ")
+		scanner := bufio.NewScanner(os.Stdin)
+		if scanner.Scan() {
+			un := strings.TrimSpace(scanner.Text())
+			if un == "" {
+				return nil, fmt.Errorf("you must provide username/password credentials")
+			}
+			c.Username = un
+		}
+
 	}
 
+	if c.Password == "" {
+		fmt.Println("Enter your ICANN password:")
+		bytePass, err := terminal.ReadPassword(syscall.Stdin)
+		if err != nil {
+			return nil, fmt.Errorf("you must provide username/password credentials")
+		}
+		pw := strings.TrimSpace(string(bytePass))
+		if pw == "" {
+			return nil, fmt.Errorf("you must provide username/password credentials")
+		}
+		c.Password = pw
+	}
 	return c, nil
 }
