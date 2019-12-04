@@ -4,12 +4,17 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"mime"
 	"net/http"
 	"net/url"
+	"os"
 	"path"
+	"strings"
 	"time"
+
+	"github.com/dustin/go-humanize"
 )
 
 // Client handles making requests to ICANN
@@ -36,6 +41,11 @@ type authCreds struct {
 
 type authResponse struct {
 	AccessToken string `json:"accessToken"`
+}
+
+type WriteCounter struct {
+	Total   uint64
+	verbose bool
 }
 
 // Auth gets the authentication token with the provided credentials
@@ -172,8 +182,8 @@ func (c *Client) DownloadZoneFile(URL string) error {
 	if err != nil {
 		return err
 	}
+	defer resp.Body.Close()
 
-	respBody, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		if c.Verbose {
 			fmt.Printf("Couldn't read response body: %v", err)
@@ -192,7 +202,7 @@ func (c *Client) DownloadZoneFile(URL string) error {
 	case http.StatusNotFound:
 		return fmt.Errorf("URL not found: %s", URL)
 	default:
-		return fmt.Errorf("unknown status error: (%d): %s", resp.StatusCode, respBody)
+		return fmt.Errorf("unknown status error: (%d): %s", resp.StatusCode, resp.Body)
 
 	}
 
@@ -210,12 +220,65 @@ func (c *Client) DownloadZoneFile(URL string) error {
 	}
 
 	path := fmt.Sprintf("%s/%s", c.Conf.WorkingDir, filename)
-	if c.Verbose {
-		fmt.Printf("\tWriting to file %s...\n", path)
+
+	out, err := os.Create(filename + ".tmp")
+	if err != nil {
+		return err
 	}
-	if err := ioutil.WriteFile(path, respBody, 0644); err != nil {
-		return fmt.Errorf("failed to write to path %s: %v", path, err)
+	defer out.Close()
+
+	counter := &WriteCounter{}
+	counter.verbose = c.Verbose
+	var n int64
+	n, err = io.Copy(out, io.TeeReader(resp.Body, counter))
+	if err != nil {
+		return err
 	}
 
+	fmt.Println()
+
+	if c.Verbose {
+		fmt.Printf("\tWriting to file %s\n", path)
+	}
+
+	for {
+		if n == int64(counter.Total) {
+			out.Close()
+			err = os.Rename(filename+".tmp", path)
+			if err != nil {
+				return fmt.Errorf("failed to write to path %s: %v", path, err)
+			}
+			goto Done
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+
+Done:
 	return nil
+}
+
+func fileExists(path string) bool {
+	_, err := os.Stat(path) //os.Stat获取文件信息
+	if err != nil {
+		if os.IsExist(err) {
+			return true
+		}
+		return false
+	}
+	return true
+}
+
+func (wc *WriteCounter) Write(p []byte) (int, error) {
+	n := len(p)
+	wc.Total += uint64(n)
+	wc.PrintProgress()
+	return n, nil
+}
+
+// PrintProgress prints the progress of a file write
+func (wc WriteCounter) PrintProgress() {
+	if wc.verbose {
+		fmt.Printf("\r%s", strings.Repeat(" ", 50))
+		fmt.Printf("\rDownloading... %s complete", humanize.Bytes(wc.Total))
+	}
 }
