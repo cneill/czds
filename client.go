@@ -27,8 +27,10 @@ type Client struct {
 
 // NewClient returns an initialized Client
 func NewClient(conf *Config, verbose bool) *Client {
+	tr := http.Transport{DisableKeepAlives: true}
+	cl := http.Client{Transport: &tr}
 	return &Client{
-		Client:  http.DefaultClient,
+		Client:  &cl,
 		Verbose: verbose,
 		Conf:    conf,
 	}
@@ -108,10 +110,12 @@ func (c *Client) Get(URL string) (*http.Response, error) {
 		return nil, err
 	}
 
-	req.Header.Add("User-Agent", "czds / v0.0.1 https://github.com/cneill/czds")
+	req.Header.Add("User-Agent", "czds / v0.0.2")
 	req.Header.Add("Content-Type", "application/json")
 	req.Header.Add("Accept", "application/json")
+	req.Header.Add("Connection", "close") // prevent connect reset by peer error
 	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", c.AccessToken))
+	req.Close = true
 
 	return c.Client.Do(req)
 }
