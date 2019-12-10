@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cavaliercoder/grab"
 	"github.com/dustin/go-humanize"
 )
 
@@ -154,13 +155,118 @@ func (c *Client) GetZoneLinks() ([]string, error) {
 
 // DownloadZoneFiles takes a list of ZoneFiles and downloads them one by one
 func (c *Client) DownloadZoneFiles(URLs []string) error {
-	for _, u := range URLs {
-		if err := c.DownloadZoneFile(u); err != nil {
-			return err
+	if err := c.grabZoneFiles(URLs); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (c *Client) makeGrabRequest(url string) *grab.Request {
+	req, err := grab.NewRequest("./tmp/", url)
+	if err != nil {
+		return nil
+	}
+	req.NoResume = true
+	req.HTTPRequest.Header.Set("User-Agent", "czds / v0.0.1 https://github.com/cneill/czds")
+	req.HTTPRequest.Header.Set("Content-Type", "application/json")
+	req.HTTPRequest.Header.Set("Accept", "application/json")
+	req.HTTPRequest.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.AccessToken))
+	return req
+}
+
+func (c *Client) grabZoneFiles(URLs []string) error {
+	client := grab.NewClient()
+
+	var urlfailed []string
+
+	// create requests from command arguments
+	reqs := make([]*grab.Request, 0)
+	for _, url := range URLs {
+		req := c.makeGrabRequest(url)
+		reqs = append(reqs, req)
+	}
+	// start file downloads, 3 at a time
+	if c.Verbose {
+		fmt.Printf("Downloading %d files...\n", len(reqs))
+	}
+	respch := client.DoBatch(10, reqs...)
+
+	// start a ticker to update progress every 200ms
+	t := time.NewTicker(200 * time.Millisecond)
+
+	// monitor downloads
+	completed := 0
+	inProgress := 0
+	responses := make([]*grab.Response, 0)
+	for {
+		select {
+		case resp := <-respch:
+			if resp != nil {
+				responses = append(responses, resp)
+			}
+
+		case <-t.C:
+			// clear lines
+			if inProgress > 0 {
+				if c.Verbose {
+					fmt.Printf("\033[%dA\033[K", inProgress)
+				}
+			}
+			// update completed downloads
+			for i, resp := range responses {
+				if resp != nil && resp.IsComplete() {
+					// print final result
+					if resp.Err() != nil {
+						fmt.Fprintf(os.Stderr, "Error downloading %s: %v\n", resp.Request.URL(), resp.Err())
+						err := os.Remove(resp.Filename)
+						if err != nil {
+							fmt.Printf("%s remove Error!", resp.Filename)
+						}
+						var url string
+						url = resp.Request.URL().String()
+						urlfailed = append(urlfailed, url)
+					} else {
+						if c.Verbose {
+							fmt.Printf("Finished %s (%d%%)\n", resp.Filename, int(100*resp.Progress()))
+						}
+						errfail := os.Rename(resp.Filename, strings.Replace(resp.Filename, "tmp", "files", -1))
+						if errfail != nil {
+							return fmt.Errorf("failed to write to path %s: %v", strings.Replace(resp.Filename, "tmp", "files", -1), errfail)
+						}
+
+					}
+
+					// mark completed
+					responses[i] = nil
+					completed++
+				}
+			}
+
+			// update downloads in progress
+			inProgress = 0
+			for _, resp := range responses {
+				if resp != nil {
+					inProgress++
+					if c.Verbose {
+						fmt.Printf("Downloading %s %d%%\n", resp.Filename, int(100*resp.Progress()))
+					}
+				}
+			}
 		}
-		time.Sleep(time.Second * 2)
+
+		if completed >= len(reqs) {
+			goto Done
+		}
+
 	}
 
+Done:
+	t.Stop()
+	c.grabZoneFiles(urlfailed)
+
+	if c.Verbose {
+		fmt.Printf("%d files successfully downloaded.\n", len(reqs))
+	}
 	return nil
 }
 
