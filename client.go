@@ -114,7 +114,6 @@ func (c *Client) Get(URL string) (*http.Response, error) {
 	req.Header.Add("User-Agent", "czds / v0.0.2")
 	req.Header.Add("Content-Type", "application/json")
 	req.Header.Add("Accept", "application/json")
-	req.Header.Add("Connection", "close") // prevent connect reset by peer error
 	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", c.AccessToken))
 	req.Close = true
 
@@ -171,7 +170,7 @@ func (c *Client) makeGrabRequest(url string) *grab.Request {
 		return nil
 	}
 	req.NoResume = true
-	req.HTTPRequest.Header.Set("User-Agent", "czds / v0.0.1 https://github.com/cneill/czds")
+	req.HTTPRequest.Header.Set("User-Agent", "czds / v0.0.2")
 	req.HTTPRequest.Header.Set("Content-Type", "application/json")
 	req.HTTPRequest.Header.Set("Accept", "application/json")
 	req.HTTPRequest.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.AccessToken))
