@@ -48,7 +48,7 @@ func ParseConfig(filename string) (*Config, error) {
 
 	if c.Password == "" {
 		fmt.Println("Enter your ICANN password:")
-		bytePass, err := terminal.ReadPassword(syscall.Stdin)
+		bytePass, err := terminal.ReadPassword(int(syscall.Stdin))
 		if err != nil {
 			return nil, fmt.Errorf("you must provide username/password credentials")
 		}

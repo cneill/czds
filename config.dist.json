@@ -1,7 +1,0 @@
-{
-    "username": "",
-    "password": "",
-    "auth_base_url": "https://account-api.icann.org",
-    "czds_base_url": "https://czds-api.icann.org",
-    "working_dir": "/tmp/"
-}
